@@ -1,95 +1,3 @@
-# # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# # More GitHub Actions for Azure: https://github.com/Azure/actions
-# name: Build and deploy Node.js app to Azure Web App - app-advanced3-6
-# on:
-#   push:
-#     branches:
-#       - deploy
-#   workflow_dispatch:
-# jobs:
-#   build:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: read
-#     steps:
-#       - uses: actions/checkout@v4
-#       - name: Set up Node.js version
-#         uses: actions/setup-node@v3
-#         with:
-#           node-version: '20.x'
-          
-#       - name: Create server.js file
-#         run: |
-#           cat > server.js << 'EOL'
-#           const { createServer } = require('http');
-#           const { parse } = require('url');
-#           const next = require('next');
-
-#           const dev = process.env.NODE_ENV !== 'production';
-#           const hostname = 'localhost';
-#           const port = process.env.PORT || 3000;
-
-#           const app = next({ dev, hostname, port });
-#           const handle = app.getRequestHandler();
-
-#           app.prepare().then(() => {
-#             createServer(async (req, res) => {
-#               try {
-#                 const parsedUrl = parse(req.url, true);
-#                 await handle(req, res, parsedUrl);
-#               } catch (err) {
-#                 console.error('Error occurred handling', req.url, err);
-#                 res.statusCode = 500;
-#                 res.end('Internal Server Error');
-#               }
-#             })
-#               .once('error', (err) => {
-#                 console.error(err);
-#                 process.exit(1);
-#               })
-#               .listen(port, () => {
-#                 console.log(`> Ready on http://${hostname}:${port}`);
-#               });
-#           });
-#           EOL
-#       - name: Update package.json start script
-#         run: |
-#           sed -i 's/"start": "next start"/"start": "node server.js"/g' package.json || true
-#       - name: npm install, build, and test
-#         run: |
-#           npm install
-#           npm run build --if-present
-#           npm run test --if-present
-#       - name: Zip artifact for deployment
-#         run: zip release.zip ./* -r
-#       - name: Upload artifact for deployment job
-#         uses: actions/upload-artifact@v4
-#         with:
-#           name: node-app
-#           path: release.zip
-#   deploy:
-#     runs-on: ubuntu-latest
-#     needs: build
-#     environment:
-#       name: 'Production'
-#       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    
-#     steps:
-#       - name: Download artifact from build job
-#         uses: actions/download-artifact@v4
-#         with:
-#           name: node-app
-#       - name: Unzip artifact for deployment
-#         run: unzip release.zip
-#       - name: 'Deploy to Azure Web App'
-#         id: deploy-to-webapp
-#         uses: azure/webapps-deploy@v2
-#         with:
-#           app-name: 'app-advanced3-6'
-#           slot-name: 'Production'
-#           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-#           package: .
-
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 name: Build and deploy Node.js app to Azure Web App - app-advanced3-6
@@ -105,60 +13,68 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      
       - name: Set up Node.js version
         uses: actions/setup-node@v3
         with:
           node-version: '20.x'
-          
+      
+      - name: npm install and build
+        run: |
+          npm install
+          npm run build --if-present
+      
+      # Create a simple server.js file at the root
       - name: Create server.js file
         run: |
           cat > server.js << 'EOL'
           const { createServer } = require('http');
           const { parse } = require('url');
           const next = require('next');
-
-          const dev = process.env.NODE_ENV !== 'production';
-          const hostname = 'localhost';
+          
+          // Get environment variables
           const port = process.env.PORT || 3000;
-
-          const app = next({ dev, hostname, port });
+          
+          // Configure the Next.js app
+          const app = next({ 
+            dev: false,
+            dir: __dirname 
+          });
           const handle = app.getRequestHandler();
-
+          
+          console.log(`Starting server on port ${port}...`);
+          
+          // Start the server
           app.prepare().then(() => {
-            createServer(async (req, res) => {
-              try {
-                const parsedUrl = parse(req.url, true);
-                await handle(req, res, parsedUrl);
-              } catch (err) {
-                console.error('Error occurred handling', req.url, err);
-                res.statusCode = 500;
-                res.end('Internal Server Error');
-              }
-            })
-              .once('error', (err) => {
-                console.error(err);
-                process.exit(1);
-              })
-              .listen(port, () => {
-                console.log(`> Ready on http://${hostname}:${port}`);
-              });
+            createServer((req, res) => {
+              const parsedUrl = parse(req.url, true);
+              handle(req, res, parsedUrl);
+            }).listen(port, (err) => {
+              if (err) throw err;
+              console.log(`> Ready on port ${port}`);
+            });
+          }).catch(err => {
+            console.error('Failed to start server:', err);
+            process.exit(1);
           });
           EOL
-      - name: Update package.json start script
+      
+      # Add a package.json with a start script that points to server.js
+      - name: Update package.json
         run: |
-          sed -i 's/"start": "next start"/"start": "node server.js"/g' package.json || true
-      - name: npm install, build, and test
-        run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
+          # Make sure package.json has the right dependencies and scripts
+          jq '.scripts.start = "node server.js"' package.json > package.json.tmp
+          mv package.json.tmp package.json
+      
       - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+        run: zip -r release.zip ./* -r
+      
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
           path: release.zip
+  
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -171,8 +87,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
+      
       - name: Unzip artifact for deployment
         run: unzip release.zip
+      
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v2
