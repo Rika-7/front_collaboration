@@ -21,51 +21,98 @@ jobs:
       - name: npm install
         run: npm ci
       
-      - name: Update package.json for ESM
+      # List files before making changes
+      - name: List files before
+        run: ls -la
+          
+      - name: Create server.js file explicitly
         run: |
-          # Add type:module to package.json
-          jq '. + {"type":"module"}' package.json > temp.json && mv temp.json package.json
+          cat > server.js << 'EOF'
+          // Add diagnostic logging
+          console.log("Starting server.js");
+          console.log("NODE_ENV:", process.env.NODE_ENV);
+          console.log("PORT:", process.env.PORT);
+          console.log("CWD:", process.cwd());
+          
+          try {
+            const fs = await import('fs');
+            console.log("Files in directory:", fs.readdirSync(".").join(", "));
+          } catch (e) {
+            console.log("Could not list files:", e.message);
+          }
+
+          import { createServer } from "http";
+          import { parse } from "url";
+          import next from "next";
+          import { fileURLToPath } from "url";
+          import { dirname } from "path";
+
+          // Create equivalent of __dirname for ES modules
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirname = dirname(__filename);
+
+          // Create the Next.js app
+          const app = next({
+            dev: process.env.NODE_ENV !== "production",
+            dir: __dirname,
+          });
+          const handle = app.getRequestHandler();
+
+          // Get port from environment variable
+          const port = process.env.PORT || 3000;
+
+          console.log("Initializing Next.js app...");
+          // Prepare the app and start the server
+          app
+            .prepare()
+            .then(() => {
+              console.log("Next.js app prepared, starting HTTP server...");
+              createServer((req, res) => {
+                // Parse the URL
+                const parsedUrl = parse(req.url, true);
+
+                // Let Next.js handle the request
+                handle(req, res, parsedUrl);
+              }).listen(port, (err) => {
+                if (err) throw err;
+                console.log(`> Ready on http://localhost:${port}`);
+                console.log(`> Environment: ${process.env.NODE_ENV}`);
+              });
+            })
+            .catch((err) => {
+              console.error("Error starting server:", err);
+              console.error("Error details:", err.stack);
+              process.exit(1);
+            });
+          EOF
+          
+          # Verify the file was created
+          ls -la server.js
+          cat server.js | head -10
       
-      - name: Create JavaScript config files
+      - name: Create next.config.mjs
         run: |
-          # Create next.config.mjs (ESM version)
           echo "/** @type {import('next').NextConfig} */" > next.config.mjs
           echo "const nextConfig = {" >> next.config.mjs
           echo "  output: \"standalone\"," >> next.config.mjs
           echo "};" >> next.config.mjs
           echo "export default nextConfig;" >> next.config.mjs
           
-          # Create postcss.config.mjs (ESM version)
-          echo "/** @type {import('postcss-load-config').Config} */" > postcss.config.mjs
-          echo "export default {" >> postcss.config.mjs
-          echo "  plugins: {" >> postcss.config.mjs
-          echo "    tailwindcss: {}," >> postcss.config.mjs
-          echo "    autoprefixer: {}," >> postcss.config.mjs
-          echo "  }," >> postcss.config.mjs
-          echo "};" >> postcss.config.mjs
-      
       - name: Create optimized production build
         run: npm run build
-          
-      - name: Prepare for deployment
-        run: |
-          # Create a diagnostic file to verify imports are working
-          echo "// Import path check" > check-imports.js
-          echo "import { fileURLToPath } from 'url';" >> check-imports.js
-          echo "import { dirname } from 'path';" >> check-imports.js
-          echo "import fs from 'fs';" >> check-imports.js
-          echo "" >> check-imports.js
-          echo "// Print working directory and files" >> check-imports.js
-          echo "console.log('CWD:', process.cwd());" >> check-imports.js
-          echo "console.log('Files:', fs.readdirSync('.'));" >> check-imports.js
-          echo "console.log('NODE_ENV:', process.env.NODE_ENV);" >> check-imports.js
-          echo "console.log('PORT:', process.env.PORT);" >> check-imports.js
-          echo "" >> check-imports.js
-          echo "// Import server" >> check-imports.js
-          echo "import './server.js';" >> check-imports.js
       
+      # List files to verify our deployment package contents
+      - name: List files after build
+        run: |
+          echo "Root directory:"
+          ls -la
+          echo ""
+          echo ".next directory:"
+          ls -la .next
+          
       - name: Zip artifact for deployment
         run: |
+          # Make sure to include server.js explicitly
           zip -r release.zip . -x "*.git*" "node_modules/*" ".next/cache/*"
           
       - name: Upload artifact for deployment job
@@ -89,6 +136,19 @@ jobs:
           
       - name: Unzip artifact for deployment
         run: unzip release.zip
+        
+      # List files to verify server.js exists
+      - name: List deployment files
+        run: |
+          echo "Contents of deployment package:"
+          ls -la
+          echo "Is server.js present?"
+          if [ -f server.js ]; then
+            echo "YES - server.js exists"
+            cat server.js | head -5
+          else
+            echo "NO - server.js is missing"
+          fi
         
       - name: Install production dependencies
         run: npm ci --omit=dev
