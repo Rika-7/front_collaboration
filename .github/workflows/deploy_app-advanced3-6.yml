@@ -47,7 +47,7 @@ jobs:
           
       - name: Zip artifact for deployment
         run: |
-          npm ci --production
+          npm ci 
           zip -r release.zip . -x "*.git*" "node_modules/[email protected]*" "node_modules/@[email protected]*"
           
       - name: Upload artifact for deployment job
