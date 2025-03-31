@@ -21,25 +21,14 @@ jobs:
       - name: npm install
         run: npm ci
       
-      - name: Fix Tailwind and PostCSS dependencies
+      - name: Transpile TypeScript configuration files
         run: |
-          # Remove potentially conflicting packages
-          npm uninstall @tailwindcss/postcss7-compat
-          npm uninstall tailwindcss
+          # Create next.config.js from next.config.ts
+          npx typescript --project tsconfig.json --module CommonJS --outDir ./dist-config
+          cp ./dist-config/next.config.js ./next.config.js
           
-          # Install correct versions
-          npm install -D tailwindcss@3.3.2 postcss@8.4.24 autoprefixer@10.4.14
-      
-      - name: Create postcss.config.js if needed
-        run: |
-          if [ ! -f "postcss.config.js" ]; then
-            echo "module.exports = {
-              plugins: {
-                tailwindcss: {},
-                autoprefixer: {},
-              },
-            }" > postcss.config.js
-          fi
+          # Create postcss.config.js
+          echo "module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };" > ./postcss.config.js
           
       - name: Create optimized production build
         run: npm run build
