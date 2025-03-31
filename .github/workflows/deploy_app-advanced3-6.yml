@@ -24,47 +24,12 @@ jobs:
       - name: Transpile TypeScript configuration files
         run: |
           # Create next.config.js from next.config.ts
-          npx typescript --project tsconfig.json --module CommonJS --outDir ./dist-config
-          cp ./dist-config/next.config.js ./next.config.js
-          
-          # Create postcss.config.js
-          echo "module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };" > ./postcss.config.js
+          npx typescript --module CommonJS --outDir ./dist-config ./next.config.ts
+          # Fix module.exports
+          echo "module.exports = $(cat ./dist-config/next.config.js | grep -oP '(?<=exports\.default = ).*')" > ./next.config.js
           
       - name: Create optimized production build
         run: npm run build
-          
-      - name: Create server.js
-        run: |
-          cat > server.js << 'EOL'
-          const { createServer } = require("http");
-          const { parse } = require("url");
-          const next = require("next");
-          const app = next({ 
-            dev: process.env.NODE_ENV !== "production", 
-            dir: __dirname 
-          });
-          const handle = app.getRequestHandler();
-          const port = process.env.PORT || 3000;
-          app.prepare().then(() => {
-            createServer((req, res) => {
-              const parsedUrl = parse(req.url, true);
-              handle(req, res, parsedUrl);
-            }).listen(port, (err) => {
-              if (err) throw err;
-              console.log(`> Ready on http://localhost:${port}`);
-            });
-          }).catch(err => {
-            console.error("Error starting server:", err);
-            process.exit(1);
-          });
-          EOL
-          
-      - name: Update package.json for Azure
-        run: |
-          # Add start script if it doesn't exist
-          if ! grep -q "\"start\":" package.json; then
-            sed -i 's/"scripts": {/"scripts": {\n    "start": "node server.js",/g' package.json
-          fi
           
       - name: Zip artifact for deployment
         run: |
