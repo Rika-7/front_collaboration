@@ -21,84 +21,104 @@ jobs:
       - name: npm install
         run: npm ci
       
-      # List files before making changes
-      - name: List files before
-        run: ls -la
-          
-      - name: Create server.js file explicitly
+      # Create proper ES modules server.js file
+      - name: Create server.js file
         run: |
           cat > server.js << 'EOF'
-          // Add diagnostic logging
-          console.log("Starting server.js");
+          // server.js - ES module version
+          console.log("Starting server.js (ES module version)...");
           console.log("NODE_ENV:", process.env.NODE_ENV);
           console.log("PORT:", process.env.PORT);
           console.log("CWD:", process.cwd());
-          
-          // Use async IIFE pattern to allow top-level await
-          (async function() {
+
+          // ES module imports
+          import { createServer } from 'http';
+          import { parse } from 'url';
+          import { fileURLToPath } from 'url';
+          import { dirname, join } from 'path';
+          import * as fs from 'fs';
+          import next from 'next';
+
+          // Create __dirname equivalent for ES modules
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirname = dirname(__filename);
+
+          try {
+            console.log("Files in directory:", fs.readdirSync(".").join(", "));
+          } catch (e) {
+            console.log("Could not list files:", e.message);
+          }
+
+          // Wrap everything in an async function for better error handling
+          const startServer = async () => {
             try {
-              // Dynamic imports
-              const { createServer } = await import("http");
-              const { parse } = await import("url");
-              const { default: next } = await import("next");
-              const { fileURLToPath } = await import("url");
-              const { dirname } = await import("path");
-              const fs = await import("fs");
+              const port = process.env.PORT || 3000;
+              const dev = process.env.NODE_ENV !== "production";
               
-              try {
-                console.log("Files in directory:", fs.readdirSync(".").join(", "));
-              } catch (e) {
-                console.log("Could not list files:", e.message);
+              console.log(`Starting server in ${dev ? "development" : "production"} mode`);
+              
+              // Check for standalone directory
+              const standaloneDir = join(".next", "standalone");
+              if (fs.existsSync(standaloneDir)) {
+                console.log("Standalone directory exists at:", standaloneDir);
+                console.log("Contents:", fs.readdirSync(standaloneDir).join(", "));
+                
+                try {
+                  // Import the standalone server (ES modules approach)
+                  console.log("Trying to load standalone server...");
+                  const standaloneServerPath = join(process.cwd(), '.next', 'standalone', 'server.js');
+                  console.log("Standalone server path:", standaloneServerPath);
+                  
+                  // Dynamic import of the standalone server
+                  await import(standaloneServerPath);
+                  return; // Exit if successful
+                } catch (e) {
+                  console.error("Failed to load standalone server:", e.message, e.stack);
+                  console.log("Falling back to custom server...");
+                }
+              } else {
+                console.log("No standalone directory found - using custom server");
               }
               
-              // Create equivalent of __dirname for ES modules
-              const __filename = fileURLToPath(import.meta.url);
-              const __dirname = dirname(__filename);
-              
-              // Get port from environment variable
-              const port = process.env.PORT || 3000;
-              
-              // Create the Next.js app
-              const app = next({
-                dev: process.env.NODE_ENV !== "production",
-                dir: __dirname,
-              });
+              // Create custom Next.js server
+              const app = next({ dev, dir: __dirname });
               const handle = app.getRequestHandler();
               
-              console.log("Initializing Next.js app...");
-              
+              console.log("Preparing Next.js app...");
               try {
-                // Use await instead of then chains for better error handling
                 await app.prepare();
                 console.log("Next.js app prepared, starting HTTP server...");
                 
                 createServer((req, res) => {
-                  // Parse the URL
                   const parsedUrl = parse(req.url, true);
-                  // Let Next.js handle the request
                   handle(req, res, parsedUrl);
                 }).listen(port, (err) => {
-                  if (err) throw err;
+                  if (err) {
+                    console.error("Error starting server:", err);
+                    throw err;
+                  }
                   console.log(`> Ready on http://localhost:${port}`);
                   console.log(`> Environment: ${process.env.NODE_ENV}`);
                 });
               } catch (err) {
                 console.error("Error preparing Next.js app:", err);
-                console.error("Error stack:", err.stack);
+                console.error("Error details:", err.stack);
                 process.exit(1);
               }
             } catch (err) {
-              console.error("Error loading modules:", err);
-              console.error("Error stack:", err.stack);
+              console.error("Fatal error:", err);
+              console.error("Error details:", err.stack);
               process.exit(1);
             }
-          })();
+          };
+
+          // Start the server
+          startServer().catch(err => {
+            console.error("Unhandled server startup error:", err);
+            process.exit(1);
+          });
           EOF
           
-          # Verify the file was created
-          ls -la server.js
-          cat server.js | head -10
-      
       - name: Create next.config.mjs
         run: |
           echo "/** @type {import('next').NextConfig} */" > next.config.mjs
@@ -109,7 +129,7 @@ jobs:
           
       - name: Create optimized production build
         run: npm run build
-      
+        
       # List files to verify our deployment package contents
       - name: List files after build
         run: |
@@ -127,9 +147,14 @@ jobs:
             echo "No standalone directory found"
           fi
           
+      # Enable detailed debugging for Azure
+      - name: Create .env file with debugging enabled
+        run: |
+          echo "NODE_ENV=production" > .env
+          echo "DEBUG=*" >> .env
+          
       - name: Zip artifact for deployment
         run: |
-          # Make sure to include server.js explicitly
           zip -r release.zip . -x "*.git*" "node_modules/*" ".next/cache/*"
           
       - name: Upload artifact for deployment job
@@ -154,29 +179,8 @@ jobs:
       - name: Unzip artifact for deployment
         run: unzip release.zip
         
-      # List files to verify server.js exists
-      - name: List deployment files
-        run: |
-          echo "Contents of deployment package:"
-          ls -la
-          echo "Is server.js present?"
-          if [ -f server.js ]; then
-            echo "YES - server.js exists"
-            cat server.js | head -5
-          else
-            echo "NO - server.js is missing"
-          fi
-        
       - name: Install production dependencies
         run: npm ci --omit=dev
-        
-      - name: Verify Node.js version
-        run: |
-          node --version
-          npm --version
-          echo "Environment info:"
-          echo "NODE_ENV: $NODE_ENV"
-          echo "NODE_OPTIONS: $NODE_OPTIONS"
       
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
