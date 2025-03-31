@@ -1,11 +1,9 @@
 name: Build and deploy Next.js app to Azure Web App
-
 on:
   push:
     branches:
       - deploy
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,46 +20,50 @@ jobs:
           
       - name: npm install
         run: npm ci
+      
+      - name: Update package.json for ESM
+        run: |
+          # Add type:module to package.json
+          jq '. + {"type":"module"}' package.json > temp.json && mv temp.json package.json
+      
+      - name: Create JavaScript config files
+        run: |
+          # Create next.config.mjs (ESM version)
+          echo "/** @type {import('next').NextConfig} */" > next.config.mjs
+          echo "const nextConfig = {" >> next.config.mjs
+          echo "  output: \"standalone\"," >> next.config.mjs
+          echo "};" >> next.config.mjs
+          echo "export default nextConfig;" >> next.config.mjs
           
+          # Create postcss.config.mjs (ESM version)
+          echo "/** @type {import('postcss-load-config').Config} */" > postcss.config.mjs
+          echo "export default {" >> postcss.config.mjs
+          echo "  plugins: {" >> postcss.config.mjs
+          echo "    tailwindcss: {}," >> postcss.config.mjs
+          echo "    autoprefixer: {}," >> postcss.config.mjs
+          echo "  }," >> postcss.config.mjs
+          echo "};" >> postcss.config.mjs
+      
       - name: Create optimized production build
         run: npm run build
           
-      - name: Create server.js
+      - name: Prepare for deployment
         run: |
-          cat > server.js << 'EOL'
-          const { createServer } = require("http");
-          const { parse } = require("url");
-          const next = require("next");
-
-          const app = next({ 
-            dev: process.env.NODE_ENV !== "production", 
-            dir: __dirname 
-          });
-          const handle = app.getRequestHandler();
-
-          const port = process.env.PORT || 3000;
-
-          app.prepare().then(() => {
-            createServer((req, res) => {
-              const parsedUrl = parse(req.url, true);
-              handle(req, res, parsedUrl);
-            }).listen(port, (err) => {
-              if (err) throw err;
-              console.log(`> Ready on http://localhost:${port}`);
-            });
-          }).catch(err => {
-            console.error("Error starting server:", err);
-            process.exit(1);
-          });
-          EOL
-          
-      - name: Update package.json for Azure
-        run: |
-          # Add start script if it doesn't exist
-          if ! grep -q "\"start\":" package.json; then
-            sed -i 's/"scripts": {/"scripts": {\n    "start": "node server.js",/g' package.json
-          fi
-          
+          # Create a diagnostic file to verify imports are working
+          echo "// Import path check" > check-imports.js
+          echo "import { fileURLToPath } from 'url';" >> check-imports.js
+          echo "import { dirname } from 'path';" >> check-imports.js
+          echo "import fs from 'fs';" >> check-imports.js
+          echo "" >> check-imports.js
+          echo "// Print working directory and files" >> check-imports.js
+          echo "console.log('CWD:', process.cwd());" >> check-imports.js
+          echo "console.log('Files:', fs.readdirSync('.'));" >> check-imports.js
+          echo "console.log('NODE_ENV:', process.env.NODE_ENV);" >> check-imports.js
+          echo "console.log('PORT:', process.env.PORT);" >> check-imports.js
+          echo "" >> check-imports.js
+          echo "// Import server" >> check-imports.js
+          echo "import './server.js';" >> check-imports.js
+      
       - name: Zip artifact for deployment
         run: |
           zip -r release.zip . -x "*.git*" "node_modules/*" ".next/cache/*"
