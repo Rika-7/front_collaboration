@@ -21,13 +21,23 @@ jobs:
       - name: npm install
         run: npm ci
       
-      - name: Transpile TypeScript configuration files
+      - name: Create JavaScript config files
         run: |
           # Create next.config.js from next.config.ts
-          npx typescript --module CommonJS --outDir ./dist-config ./next.config.ts
-          # Fix module.exports
-          echo "module.exports = $(cat ./dist-config/next.config.js | grep -oP '(?<=exports\.default = ).*')" > ./next.config.js
+          echo "/** @type {import('next').NextConfig} */" > next.config.js
+          echo "module.exports = {" >> next.config.js
+          echo "  output: \"standalone\"," >> next.config.js
+          echo "};" >> next.config.js
           
+          # Create postcss.config.js
+          echo "/** @type {import('postcss-load-config').Config} */" > postcss.config.js
+          echo "module.exports = {" >> postcss.config.js
+          echo "  plugins: {" >> postcss.config.js
+          echo "    tailwindcss: {}," >> postcss.config.js
+          echo "    autoprefixer: {}," >> postcss.config.js
+          echo "  }," >> postcss.config.js
+          echo "};" >> postcss.config.js
+      
       - name: Create optimized production build
         run: npm run build
           
