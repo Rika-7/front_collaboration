@@ -21,7 +21,11 @@ jobs:
       - name: npm install
         run: npm ci
       
-      - name: Update server.js to support ESM
+      # List files before making changes
+      - name: List files before
+        run: ls -la
+          
+      - name: Create server.js file explicitly
         run: |
           cat > server.js << 'EOF'
           // Add diagnostic logging
@@ -29,10 +33,10 @@ jobs:
           console.log("NODE_ENV:", process.env.NODE_ENV);
           console.log("PORT:", process.env.PORT);
           console.log("CWD:", process.cwd());
+          
           try {
-            // Use Node's fs instead of Deno
-            import { readdirSync } from 'fs';
-            console.log("Files in directory:", readdirSync("./").join(", "));
+            const fs = await import('fs');
+            console.log("Files in directory:", fs.readdirSync(".").join(", "));
           } catch (e) {
             console.log("Could not list files:", e.message);
           }
@@ -57,10 +61,12 @@ jobs:
           // Get port from environment variable
           const port = process.env.PORT || 3000;
 
+          console.log("Initializing Next.js app...");
           // Prepare the app and start the server
           app
             .prepare()
             .then(() => {
+              console.log("Next.js app prepared, starting HTTP server...");
               createServer((req, res) => {
                 // Parse the URL
                 const parsedUrl = parse(req.url, true);
@@ -79,8 +85,12 @@ jobs:
               process.exit(1);
             });
           EOF
+          
+          # Verify the file was created
+          ls -la server.js
+          cat server.js | head -10
       
-      - name: Create next.config.mjs (ESM version)
+      - name: Create next.config.mjs
         run: |
           echo "/** @type {import('next').NextConfig} */" > next.config.mjs
           echo "const nextConfig = {" >> next.config.mjs
@@ -88,34 +98,21 @@ jobs:
           echo "};" >> next.config.mjs
           echo "export default nextConfig;" >> next.config.mjs
           
-      - name: Create postcss.config.mjs (ESM version)
-        run: |
-          echo "/** @type {import('postcss-load-config').Config} */" > postcss.config.mjs
-          echo "export default {" >> postcss.config.mjs
-          echo "  plugins: {" >> postcss.config.mjs
-          echo "    tailwindcss: {}," >> postcss.config.mjs
-          echo "    autoprefixer: {}," >> postcss.config.mjs
-          echo "  }," >> postcss.config.mjs
-          echo "};" >> postcss.config.mjs
-      
       - name: Create optimized production build
         run: npm run build
       
-      - name: Fix fs import issue in server.js
+      # List files to verify our deployment package contents
+      - name: List files after build
         run: |
-          # The dynamic import of fs might cause issues, let's fix it
-          sed -i 's/import { readdirSync } from '\''fs'\'';/import fs from '\''fs'\''; const readdirSync = fs.readdirSync;/' server.js
+          echo "Root directory:"
+          ls -la
+          echo ""
+          echo ".next directory:"
+          ls -la .next
           
-      - name: Create startup script
-        run: |
-          echo "#!/bin/sh" > startup.sh
-          echo "export NODE_ENV=production" >> startup.sh
-          echo "echo 'Starting application...'" >> startup.sh
-          echo "node --trace-warnings server.js" >> startup.sh
-          chmod +x startup.sh
-      
       - name: Zip artifact for deployment
         run: |
+          # Make sure to include server.js explicitly
           zip -r release.zip . -x "*.git*" "node_modules/*" ".next/cache/*"
           
       - name: Upload artifact for deployment job
@@ -140,17 +137,21 @@ jobs:
       - name: Unzip artifact for deployment
         run: unzip release.zip
         
+      # List files to verify server.js exists
+      - name: List deployment files
+        run: |
+          echo "Contents of deployment package:"
+          ls -la
+          echo "Is server.js present?"
+          if [ -f server.js ]; then
+            echo "YES - server.js exists"
+            cat server.js | head -5
+          else
+            echo "NO - server.js is missing"
+          fi
+        
       - name: Install production dependencies
         run: npm ci --omit=dev
-      
-      - name: Verify Node.js and Next.js versions
-        run: |
-          echo "Node.js version:"
-          node --version
-          echo "NPM version:"
-          npm --version
-          echo "Package versions:"
-          cat package.json | grep -E '"next"|"react"|"react-dom"'
       
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
