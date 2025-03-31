@@ -1,15 +1,20 @@
-// server.js - ES Module version
-console.log("Starting server.js...");
+// server.js - ES module version
+console.log("Starting server.js (ES module version)...");
 console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("PORT:", process.env.PORT);
 console.log("CWD:", process.cwd());
 
+// ES module imports
 import { createServer } from "http";
 import { parse } from "url";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import fs from "fs";
+import * as fs from "fs";
 import next from "next";
+
+// Create __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 try {
   console.log("Files in directory:", fs.readdirSync(".").join(", "));
@@ -17,65 +22,53 @@ try {
   console.log("Could not list files:", e.message);
 }
 
-// Create equivalent of __dirname for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Check if Next.js is installed
-try {
-  console.log("Checking for Next.js...");
-  await import("next");
-} catch (e) {
-  console.error("Error importing Next.js:", e.message);
-  process.exit(1);
-}
-
-// Check for standalone directory
-const standaloneDir = join(".next", "standalone");
-if (fs.existsSync(standaloneDir)) {
-  console.log("Standalone directory exists - using standalone server");
-  // We need to dynamically import the standalone server
+// Wrap everything in an async function for better error handling
+const startServer = async () => {
   try {
-    const standaloneServerPath = join(
-      process.cwd(),
-      ".next",
-      "standalone",
-      "server.js"
-    );
+    const port = process.env.PORT || 3000;
+    const dev = process.env.NODE_ENV !== "production";
+
     console.log(
-      "Trying to import standalone server from:",
-      standaloneServerPath
+      `Starting server in ${dev ? "development" : "production"} mode`
     );
-    await import(standaloneServerPath);
-  } catch (e) {
-    console.error("Failed to import standalone server:", e.message);
-    console.log("Falling back to custom server...");
-    startCustomServer();
-  }
-} else {
-  console.log("No standalone directory found - starting custom server");
-  startCustomServer();
-}
 
-// Function to start a custom Next.js server
-function startCustomServer() {
-  const dev = process.env.NODE_ENV !== "production";
-  const port = process.env.PORT || 3000;
+    // Check for standalone directory
+    const standaloneDir = join(".next", "standalone");
+    if (fs.existsSync(standaloneDir)) {
+      console.log("Standalone directory exists at:", standaloneDir);
+      console.log("Contents:", fs.readdirSync(standaloneDir).join(", "));
 
-  console.log(
-    "Starting custom Next.js server in",
-    dev ? "development" : "production",
-    "mode"
-  );
+      try {
+        // Import the standalone server (ES modules approach)
+        console.log("Trying to load standalone server...");
+        const standaloneServerPath = join(
+          process.cwd(),
+          ".next",
+          "standalone",
+          "server.js"
+        );
+        console.log("Standalone server path:", standaloneServerPath);
 
-  const app = next({ dev, dir: __dirname });
-  const handle = app.getRequestHandler();
+        // Dynamic import of the standalone server
+        await import(standaloneServerPath);
+        return; // Exit if successful
+      } catch (e) {
+        console.error("Failed to load standalone server:", e.message, e.stack);
+        console.log("Falling back to custom server...");
+      }
+    } else {
+      console.log("No standalone directory found - using custom server");
+    }
 
-  console.log("Preparing Next.js app...");
-  app
-    .prepare()
-    .then(() => {
+    // Create custom Next.js server
+    const app = next({ dev, dir: __dirname });
+    const handle = app.getRequestHandler();
+
+    console.log("Preparing Next.js app...");
+    try {
+      await app.prepare();
       console.log("Next.js app prepared, starting HTTP server...");
+
       createServer((req, res) => {
         const parsedUrl = parse(req.url, true);
         handle(req, res, parsedUrl);
@@ -85,10 +78,22 @@ function startCustomServer() {
           throw err;
         }
         console.log(`> Ready on http://localhost:${port}`);
+        console.log(`> Environment: ${process.env.NODE_ENV}`);
       });
-    })
-    .catch((err) => {
-      console.error("Error starting Next.js:", err);
+    } catch (err) {
+      console.error("Error preparing Next.js app:", err);
+      console.error("Error details:", err.stack);
       process.exit(1);
-    });
-}
+    }
+  } catch (err) {
+    console.error("Fatal error:", err);
+    console.error("Error details:", err.stack);
+    process.exit(1);
+  }
+};
+
+// Start the server
+startServer().catch((err) => {
+  console.error("Unhandled server startup error:", err);
+  process.exit(1);
+});
