@@ -113,3 +113,5 @@ export const Header: React.FC<HeaderProps> = ({ currentPage = "案件検索" }) 
     </header>
   );
 };
+
+export default Header;
