@@ -1,17 +1,7 @@
-import Header from "../../components/common/Header";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../../components/ui/tabs";
-import { Button } from "../../components/ui/button";
+import Header from "@/components/common/Header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import {
   Download,
   DollarSign,
@@ -19,14 +9,10 @@ import {
   CreditCard,
   Activity,
 } from "lucide-react";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "../../components/ui/avatar";
-import { BarChart } from "../../components/dashboard/bar-chart";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { BarChart } from "@/components/dashboard/bar-chart";
 // Ensure the correct path to the DatePickerWithRange component
-import { DatePickerWithRange } from "../../components/dashboard/date-range-picker";
+import { DatePickerWithRange } from "@/components/dashboard/date-range-picker";
 
 export default function DashboardPage() {
   return (
