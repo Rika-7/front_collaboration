@@ -1,3 +1,4 @@
+// next.config.ts
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -9,6 +10,7 @@ const nextConfig: NextConfig = {
   experimental: {
     esmExternals: true,
   },
+  transpilePackages: ["recharts"],
 };
 
 export default nextConfig;
