@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -10,6 +10,11 @@ interface NavigationItem {
 }
 
 const navigationItems: NavigationItem[] = [
+  {
+    icon: "/icons/search.svg",
+    label: "ダッシュボード",
+    href: "/dashboard",
+  },
   { icon: "/icons/clipboard.svg", label: "マイページ", href: "/home" },
   {
     icon: "/icons/mail.svg",
@@ -21,12 +26,12 @@ const navigationItems: NavigationItem[] = [
   {
     icon: "/icons/search.svg",
     label: "案件登録",
-    href: "/search_researcher_results",
+    href: "/project_registration",
   },
   {
     icon: "/icons/search.svg",
     label: "案件検索",
-    href: "/search_researcher_results",
+    href: "/search_project",
   },
 ];
 
@@ -68,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPage = "案件検索" }) 
             <div className="flex gap-2.5 items-center text-base font-semibold cursor-pointer text-zinc-800">
               <div className="flex relative gap-2.5 items-center">
                 <Image
-                  src={item.icon}
+                  src={item.icon || "/placeholder.svg"}
                   alt={item.label}
                   width={24}
                   height={24}
